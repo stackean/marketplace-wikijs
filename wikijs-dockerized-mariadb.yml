@@ -1,0 +1,63 @@
+type: install
+name: Wiki.js with MariaDB
+
+globals:
+  DB_NAME: wikijs
+  DB_USER: wikijs_user
+  DB_PASS: ${fn.password(12)}
+
+nodes:
+  - nodeType: mariadb-dockerized
+    nodeGroup: sqldb
+    displayName: db-node-${fn.random}
+    diskLimit: 5
+    cloudlets: 1
+    flexibleCloudlets: 4
+
+onInstall:
+  - prepareSqlDatabase:
+      nodeGroup: sqldb
+      loginCredentials:
+        user: root
+        password: ${nodes.sqldb.password}
+      newDatabaseName: ${globals.DB_NAME}
+      newDatabaseUser:
+        name: ${globals.DB_USER}
+        password: ${globals.DB_PASS}
+  - addNodes:
+      nodeType: docker
+      nodeGroup: cp
+      dockerName: requarks/wiki
+      dockerTag: 2
+      dockerLinks:
+        sourceNodeGroup: sqldb
+        alias: sqldb
+      displayName: app-node-${fn.random}
+      diskLimit: 5
+      cloudlets: 1
+      flexibleCloudlets: 4
+      dockerEnvVars:
+        DB_TYPE: mysql
+        DB_HOST: ${nodes.sqldb.address}
+        DB_PORT: 3306
+        DB_USER: ${globals.DB_USER}
+        DB_PASS: ${globals.DB_PASS}
+        DB_NAME: ${globals.DB_NAME}
+  - addEndpoint
+  - return:
+      result: success
+      email: success
+  
+actions:
+  addEndpoint:
+    - api: environment.control.AddEndpoint
+      nodeId: ${nodes.cp.id}
+      privatePort: 3000
+      protocol: TCP
+      name: admin
+    - setGlobals:  
+        publicPort: ${response.object.publicPort}
+        
+success: |
+  Your Wiki.js app is successfully installed.
+  **URL**: http://node${nodes.cp.id}-${env.domain}:${globals.publicPort}
